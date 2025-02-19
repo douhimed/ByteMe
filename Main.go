@@ -20,7 +20,6 @@ func main() {
 	}
 
 	constPoolCount := int(container.parse_u2())
-	var cp Constant_Pool_Type
 	for i := 0; i < constPoolCount-1; i++ {
 		tag := container.parse_u1()
 		cp := parseConstantPoolEntry(container, tag)
@@ -28,9 +27,6 @@ func main() {
 		if cp != nil {
 			clazz.addContstantPool(cp)
 		}
-	}
-	if cp != nil {
-		clazz.addContstantPool(cp)
 	}
 
 	clazz.asJson()
@@ -53,8 +49,10 @@ func parseConstantPoolEntry(container *Container, tag int8) Constant_Pool_Type {
 	case CONSTANT_String:
 		return parseString(container, tagValue)
 	default:
-		return nil
+		log.Printf("%s[%d] not yet implemented from the constant pool", POOL_CONSTANTS[tag], tag)
+		os.Exit(0)
 	}
+	return nil
 }
 
 func parseMethodref(container *Container, tagValue string) Methodref_Info {

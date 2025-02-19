@@ -14,73 +14,94 @@ func main() {
 	container := InitContainerFromFile("App.class")
 
 	clazz := &Clazz{
-		Magic:         hex.EncodeToString(container.parse_u4()),
-		Minor:         container.parse_u2(),
-		Major:         container.parse_u2(),
-		ConstantsPool: make([]Constant_Pool_Type, 0),
+		Magic: hex.EncodeToString(container.parse_u4()),
+		Minor: container.parse_u2(),
+		Major: container.parse_u2(),
 	}
 
 	constPoolCount := int(container.parse_u2())
+	var cp Constant_Pool_Type
 	for i := 0; i < constPoolCount-1; i++ {
 		tag := container.parse_u1()
-
-		var cp Constant_Pool_Type
-		if tag == CONSTANT_Methodref {
-			cp = Methodref_Info{
-				Tag:                 POOL_CONSTANTS[tag],
-				Class_index:         container.parse_u2(),
-				Name_and_type_index: container.parse_u2(),
-			}
-		} else if tag == CONSTANT_Class {
-			cp = CONSTANT_Class_Info{
-				Tag:        POOL_CONSTANTS[tag],
-				Name_index: container.parse_u2(),
-			}
-		} else if tag == CONSTANT_NameAndType {
-			cp = CONSTANT_NameAndType_info{
-				Tag:              POOL_CONSTANTS[tag],
-				Name_index:       container.parse_u2(),
-				Descriptor_index: container.parse_u2(),
-			}
-		} else if tag == CONSTANT_Utf8 {
-			length := int(container.parse_u2())
-			value := container.parse_(length)
-			str := fmt.Sprintf("%s", value)
-			cp = CONSTANT_Utf8_Info{
-				Tag:   POOL_CONSTANTS[tag],
-				Bytes: str,
-			}
-		} else if tag == CONSTANT_Fieldref {
-			cp = CONSTANT_Fieldref_info{
-				Tag:                 POOL_CONSTANTS[tag],
-				Class_index:         container.parse_u2(),
-				Name_and_type_index: container.parse_u2(),
-			}
-		} else if tag == CONSTANT_String {
-			cp = CONSTANT_String_info{
-				Tag:          POOL_CONSTANTS[tag],
-				String_index: container.parse_u2(),
-			}
-		}
+		cp := parseConstantPoolEntry(container, tag)
 
 		if cp != nil {
 			clazz.addContstantPool(cp)
 		}
 	}
+	if cp != nil {
+		clazz.addContstantPool(cp)
+	}
 
 	clazz.asJson()
 }
 
-func InitContainerFromFile(file string) *Container {
-	data, err := os.ReadFile(file)
-	if err != nil {
-		log.Fatal(err)
-		os.Exit(-1)
-	}
+func parseConstantPoolEntry(container *Container, tag int8) Constant_Pool_Type {
+	tagValue := POOL_CONSTANTS[tag]
 
-	return &Container{
-		Content: data,
-		Cursor:  0,
+	switch tag {
+	case CONSTANT_Methodref:
+		return parseMethodref(container, tagValue)
+	case CONSTANT_Class:
+		return parseClass(container, tagValue)
+	case CONSTANT_NameAndType:
+		return parseNameAndType(container, tagValue)
+	case CONSTANT_Utf8:
+		return parseUtf8(container, tagValue)
+	case CONSTANT_Fieldref:
+		return parseFieldref(container, tagValue)
+	case CONSTANT_String:
+		return parseString(container, tagValue)
+	default:
+		return nil
+	}
+}
+
+func parseMethodref(container *Container, tagValue string) Methodref_Info {
+	return Methodref_Info{
+		Tag:                 tagValue,
+		Class_index:         container.parse_u2(),
+		Name_and_type_index: container.parse_u2(),
+	}
+}
+
+func parseClass(container *Container, tagValue string) CONSTANT_Class_Info {
+	return CONSTANT_Class_Info{
+		Tag:        tagValue,
+		Name_index: container.parse_u2(),
+	}
+}
+
+func parseNameAndType(container *Container, tagValue string) CONSTANT_NameAndType_info {
+	return CONSTANT_NameAndType_info{
+		Tag:              tagValue,
+		Name_index:       container.parse_u2(),
+		Descriptor_index: container.parse_u2(),
+	}
+}
+
+func parseUtf8(container *Container, tagValue string) CONSTANT_Utf8_Info {
+	length := int(container.parse_u2())
+	b := container.parse_(length)
+	return CONSTANT_Utf8_Info{
+		Tag:         tagValue,
+		Bytes:       b,
+		StringBytes: string(b),
+	}
+}
+
+func parseFieldref(container *Container, tagValue string) CONSTANT_Fieldref_info {
+	return CONSTANT_Fieldref_info{
+		Tag:                 tagValue,
+		Class_index:         container.parse_u2(),
+		Name_and_type_index: container.parse_u2(),
+	}
+}
+
+func parseString(container *Container, tagValue string) CONSTANT_String_info {
+	return CONSTANT_String_info{
+		Tag:          tagValue,
+		String_index: container.parse_u2(),
 	}
 }
 
@@ -126,8 +147,9 @@ type CONSTANT_NameAndType_info struct {
 }
 
 type CONSTANT_Utf8_Info struct {
-	Tag   string `json:"tag"`
-	Bytes string `json:"bytesAsString"`
+	Tag         string `json:"tag"`
+	Bytes       []byte `json:"bytes"`
+	StringBytes string `json:"stringBytes"`
 }
 
 type CONSTANT_Fieldref_info struct {
@@ -146,6 +168,19 @@ type CONSTANT_String_info struct {
 type Container struct {
 	Content []byte
 	Cursor  int
+}
+
+func InitContainerFromFile(file string) *Container {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(-1)
+	}
+
+	return &Container{
+		Content: data,
+		Cursor:  0,
+	}
 }
 
 func (c *Container) parse_u1() int8 {

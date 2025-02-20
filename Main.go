@@ -29,7 +29,19 @@ func main() {
 		}
 	}
 
+	parseClassFlags(container, clazz)
+
 	clazz.asJson()
+}
+
+func parseClassFlags(c *Container, cl *Clazz) {
+	flags := c.parse_u2_u()
+
+	for bitmask, name := range accessFlagsMap {
+		if flags&bitmask != 0 {
+			cl.AddFlagAccess(name)
+		}
+	}
 }
 
 func parseConstantPoolEntry(container *Container, tag int8) Constant_Pool_Type {
@@ -110,6 +122,11 @@ type Clazz struct {
 	Minor         int16                `json:"manor"`
 	Major         int16                `json:"major"`
 	ConstantsPool []Constant_Pool_Type `json:"constants_pool"`
+	AccessFlags   []string             `json:"access_flags"`
+}
+
+func (c *Clazz) AddFlagAccess(f string) {
+	c.AccessFlags = append(c.AccessFlags, f)
 }
 
 func (c *Clazz) addContstantPool(cp Constant_Pool_Type) {
@@ -193,6 +210,12 @@ func (c *Container) parse_u2() int16 {
 	return to_int16(bytes)
 }
 
+func (c *Container) parse_u2_u() uint16 {
+	bytes := c.Content[c.Cursor : c.Cursor+2]
+	c.Cursor += 2
+	return to_uint16(bytes)
+}
+
 func (c *Container) parse_(steps int) []byte {
 	bytes := c.Content[c.Cursor : c.Cursor+steps]
 	c.Cursor += steps
@@ -203,6 +226,16 @@ func (c *Container) parse_u4() []byte {
 	bytes := c.Content[c.Cursor : c.Cursor+4]
 	c.Cursor += 4
 	return bytes
+}
+
+func to_uint16(data []byte) uint16 {
+	var res uint16
+	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &res)
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(-1)
+	}
+	return res
 }
 
 func to_int16(data []byte) int16 {
@@ -263,4 +296,30 @@ var POOL_CONSTANTS = map[int8]string{
 	18: "CONSTANT_InvokeDynamic",
 	19: "CONSTANT_Module",
 	20: "CONSTANT_Package",
+}
+
+// Class flags constants
+
+const (
+	ACC_PUBLIC     = 0x0001
+	ACC_FINAL      = 0x0010
+	ACC_SUPER      = 0x0020
+	ACC_INTERFACE  = 0x0200
+	ACC_ABSTRACT   = 0x0400
+	ACC_SYNTHETIC  = 0x1000
+	ACC_ANNOTATION = 0x2000
+	ACC_ENUM       = 0x4000
+	ACC_MODULE     = 0x8000
+)
+
+var accessFlagsMap = map[uint16]string{
+	ACC_PUBLIC:     "ACC_PUBLIC",
+	ACC_FINAL:      "ACC_FINAL",
+	ACC_SUPER:      "ACC_SUPER",
+	ACC_INTERFACE:  "ACC_INTERFACE",
+	ACC_ABSTRACT:   "ACC_ABSTRACT",
+	ACC_SYNTHETIC:  "ACC_SYNTHETIC",
+	ACC_ANNOTATION: "ACC_ANNOTATION",
+	ACC_ENUM:       "ACC_ENUM",
+	ACC_MODULE:     "ACC_MODULE",
 }

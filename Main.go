@@ -29,37 +29,29 @@ func main() {
 		}
 	}
 
-	parseClassFlags(container, clazz)
+	container.parseClassFlags(clazz)
 
 	clazz.asJson()
 }
 
-func parseClassFlags(c *Container, cl *Clazz) {
-	flags := c.parse_u2_u()
-
-	for bitmask, name := range accessFlagsMap {
-		if flags&bitmask != 0 {
-			cl.AddFlagAccess(name)
-		}
-	}
-}
+// Util Funcs
 
 func parseConstantPoolEntry(container *Container, tag int8) Constant_Pool_Type {
 	tagValue := POOL_CONSTANTS[tag]
 
 	switch tag {
 	case CONSTANT_Methodref:
-		return parseMethodref(container, tagValue)
+		return container.parseMethodref(tagValue)
 	case CONSTANT_Class:
-		return parseClass(container, tagValue)
+		return container.parseClass(tagValue)
 	case CONSTANT_NameAndType:
-		return parseNameAndType(container, tagValue)
+		return container.parseNameAndType(tagValue)
 	case CONSTANT_Utf8:
-		return parseUtf8(container, tagValue)
+		return container.parseUtf8(tagValue)
 	case CONSTANT_Fieldref:
-		return parseFieldref(container, tagValue)
+		return container.parseFieldref(tagValue)
 	case CONSTANT_String:
-		return parseString(container, tagValue)
+		return container.parseString(tagValue)
 	default:
 		log.Printf("%s[%d] not yet implemented from the constant pool", POOL_CONSTANTS[tag], tag)
 		os.Exit(0)
@@ -67,55 +59,50 @@ func parseConstantPoolEntry(container *Container, tag int8) Constant_Pool_Type {
 	return nil
 }
 
-func parseMethodref(container *Container, tagValue string) Methodref_Info {
-	return Methodref_Info{
-		Tag:                 tagValue,
-		Class_index:         container.parse_u2(),
-		Name_and_type_index: container.parse_u2(),
+func InitContainerFromFile(file string) *Container {
+	data, err := os.ReadFile(file)
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(-1)
+	}
+
+	return &Container{
+		Content: data,
+		Cursor:  0,
 	}
 }
 
-func parseClass(container *Container, tagValue string) CONSTANT_Class_Info {
-	return CONSTANT_Class_Info{
-		Tag:        tagValue,
-		Name_index: container.parse_u2(),
+func to_uint16(data []byte) uint16 {
+	var res uint16
+	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &res)
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(-1)
 	}
+	return res
 }
 
-func parseNameAndType(container *Container, tagValue string) CONSTANT_NameAndType_info {
-	return CONSTANT_NameAndType_info{
-		Tag:              tagValue,
-		Name_index:       container.parse_u2(),
-		Descriptor_index: container.parse_u2(),
+func to_int16(data []byte) int16 {
+	var res int16
+	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &res)
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(-1)
 	}
+	return res
 }
 
-func parseUtf8(container *Container, tagValue string) CONSTANT_Utf8_Info {
-	length := int(container.parse_u2())
-	bytes, bytesAsString := container.parse_(length)
-	return CONSTANT_Utf8_Info{
-		Tag:         tagValue,
-		Bytes:       bytes,
-		StringBytes: bytesAsString,
+func to_int8(data []byte) int8 {
+	var res int8
+	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &res)
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(-1)
 	}
+	return res
 }
 
-func parseFieldref(container *Container, tagValue string) CONSTANT_Fieldref_info {
-	return CONSTANT_Fieldref_info{
-		Tag:                 tagValue,
-		Class_index:         container.parse_u2(),
-		Name_and_type_index: container.parse_u2(),
-	}
-}
-
-func parseString(container *Container, tagValue string) CONSTANT_String_info {
-	return CONSTANT_String_info{
-		Tag:          tagValue,
-		String_index: container.parse_u2(),
-	}
-}
-
-// Clazz Funcs : The class File Structe
+// Clazz Funcs : The class File Structure
 
 type Clazz struct {
 	Magic         string               `json:"magic"`
@@ -178,23 +165,68 @@ type CONSTANT_String_info struct {
 	String_index int16  `json:"string_index"`
 }
 
-// CONTAINER Funcs
+// CONTAINER Funcs (the file contentes 'bytes', cursor 'current index to parse', parse funcs)
 
 type Container struct {
 	Content []byte
 	Cursor  int
 }
 
-func InitContainerFromFile(file string) *Container {
-	data, err := os.ReadFile(file)
-	if err != nil {
-		log.Fatal(err)
-		os.Exit(-1)
-	}
+func (container *Container) parseClassFlags(cl *Clazz) {
+	flags := container.parse_u2_u()
 
-	return &Container{
-		Content: data,
-		Cursor:  0,
+	for bitmask, name := range accessFlagsMap {
+		if flags&bitmask != 0 {
+			cl.AddFlagAccess(name)
+		}
+	}
+}
+
+func (container *Container) parseMethodref(tagValue string) Methodref_Info {
+	return Methodref_Info{
+		Tag:                 tagValue,
+		Class_index:         container.parse_u2(),
+		Name_and_type_index: container.parse_u2(),
+	}
+}
+
+func (container *Container) parseClass(tagValue string) CONSTANT_Class_Info {
+	return CONSTANT_Class_Info{
+		Tag:        tagValue,
+		Name_index: container.parse_u2(),
+	}
+}
+
+func (container *Container) parseNameAndType(tagValue string) CONSTANT_NameAndType_info {
+	return CONSTANT_NameAndType_info{
+		Tag:              tagValue,
+		Name_index:       container.parse_u2(),
+		Descriptor_index: container.parse_u2(),
+	}
+}
+
+func (container *Container) parseUtf8(tagValue string) CONSTANT_Utf8_Info {
+	length := int(container.parse_u2())
+	bytes, bytesAsString := container.parse_(length)
+	return CONSTANT_Utf8_Info{
+		Tag:         tagValue,
+		Bytes:       bytes,
+		StringBytes: bytesAsString,
+	}
+}
+
+func (container *Container) parseFieldref(tagValue string) CONSTANT_Fieldref_info {
+	return CONSTANT_Fieldref_info{
+		Tag:                 tagValue,
+		Class_index:         container.parse_u2(),
+		Name_and_type_index: container.parse_u2(),
+	}
+}
+
+func (container *Container) parseString(tagValue string) CONSTANT_String_info {
+	return CONSTANT_String_info{
+		Tag:          tagValue,
+		String_index: container.parse_u2(),
 	}
 }
 
@@ -228,74 +260,46 @@ func (c *Container) parse_u4() []byte {
 	return bytes
 }
 
-func to_uint16(data []byte) uint16 {
-	var res uint16
-	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &res)
-	if err != nil {
-		log.Fatal(err)
-		os.Exit(-1)
-	}
-	return res
-}
+// Define constant pool tags
 
-func to_int16(data []byte) int16 {
-	var res int16
-	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &res)
-	if err != nil {
-		log.Fatal(err)
-		os.Exit(-1)
-	}
-	return res
-}
-
-func to_int8(data []byte) int8 {
-	var res int8
-	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &res)
-	if err != nil {
-		log.Fatal(err)
-		os.Exit(-1)
-	}
-	return res
-}
-
-// CONSTANT POOL TAGS
-
-var CONSTANT_Class int8 = 7
-var CONSTANT_Fieldref int8 = 9
-var CONSTANT_Methodref int8 = 10
-var CONSTANT_InterfaceMethodref int8 = 11
-var CONSTANT_String int8 = 8
-var CONSTANT_Integer int8 = 3
-var CONSTANT_Float int8 = 4
-var CONSTANT_Long int8 = 5
-var CONSTANT_Double int8 = 6
-var CONSTANT_NameAndType int8 = 12
-var CONSTANT_Utf8 int8 = 1
-var CONSTANT_MethodHandle int8 = 15
-var CONSTANT_MethodType int8 = 16
-var CONSTANT_Dynamic int8 = 17
-var CONSTANT_InvokeDynamic int8 = 18
-var CONSTANT_Module int8 = 19
-var CONSTANT_Package int8 = 20
+const (
+	CONSTANT_Utf8               int8 = 1
+	CONSTANT_Integer            int8 = 3
+	CONSTANT_Float              int8 = 4
+	CONSTANT_Long               int8 = 5
+	CONSTANT_Double             int8 = 6
+	CONSTANT_Class              int8 = 7
+	CONSTANT_String             int8 = 8
+	CONSTANT_Fieldref           int8 = 9
+	CONSTANT_Methodref          int8 = 10
+	CONSTANT_InterfaceMethodref int8 = 11
+	CONSTANT_NameAndType        int8 = 12
+	CONSTANT_MethodHandle       int8 = 15
+	CONSTANT_MethodType         int8 = 16
+	CONSTANT_Dynamic            int8 = 17
+	CONSTANT_InvokeDynamic      int8 = 18
+	CONSTANT_Module             int8 = 19
+	CONSTANT_Package            int8 = 20
+)
 
 var POOL_CONSTANTS = map[int8]string{
-	1:  "CONSTANT_Utf8",
-	3:  "CONSTANT_Integer",
-	4:  "CONSTANT_Float",
-	5:  "CONSTANT_Long",
-	6:  "CONSTANT_Double",
-	7:  "CONSTANT_Class",
-	8:  "CONSTANT_String",
-	9:  "CONSTANT_Fieldref",
-	10: "CONSTANT_Methodref",
-	11: "CONSTANT_InterfaceMethodref",
-	12: "CONSTANT_NameAndType",
-	15: "CONSTANT_MethodHandle",
-	16: "CONSTANT_MethodType",
-	17: "CONSTANT_Dynamic",
-	18: "CONSTANT_InvokeDynamic",
-	19: "CONSTANT_Module",
-	20: "CONSTANT_Package",
+	CONSTANT_Utf8:               "CONSTANT_Utf8",
+	CONSTANT_Integer:            "CONSTANT_Integer",
+	CONSTANT_Float:              "CONSTANT_Float",
+	CONSTANT_Long:               "CONSTANT_Long",
+	CONSTANT_Double:             "CONSTANT_Double",
+	CONSTANT_Class:              "CONSTANT_Class",
+	CONSTANT_String:             "CONSTANT_String",
+	CONSTANT_Fieldref:           "CONSTANT_Fieldref",
+	CONSTANT_Methodref:          "CONSTANT_Methodref",
+	CONSTANT_InterfaceMethodref: "CONSTANT_InterfaceMethodref",
+	CONSTANT_NameAndType:        "CONSTANT_NameAndType",
+	CONSTANT_MethodHandle:       "CONSTANT_MethodHandle",
+	CONSTANT_MethodType:         "CONSTANT_MethodType",
+	CONSTANT_Dynamic:            "CONSTANT_Dynamic",
+	CONSTANT_InvokeDynamic:      "CONSTANT_InvokeDynamic",
+	CONSTANT_Module:             "CONSTANT_Module",
+	CONSTANT_Package:            "CONSTANT_Package",
 }
 
 // Class flags constants

@@ -80,11 +80,11 @@ func parseNameAndType(container *Container, tagValue string) CONSTANT_NameAndTyp
 
 func parseUtf8(container *Container, tagValue string) CONSTANT_Utf8_Info {
 	length := int(container.parse_u2())
-	b := container.parse_(length)
+	bytes, bytesAsString := container.parse_(length)
 	return CONSTANT_Utf8_Info{
 		Tag:         tagValue,
-		Bytes:       b,
-		StringBytes: string(b),
+		Bytes:       bytes,
+		StringBytes: bytesAsString,
 	}
 }
 
@@ -193,10 +193,10 @@ func (c *Container) parse_u2() int16 {
 	return to_int16(bytes)
 }
 
-func (c *Container) parse_(steps int) []byte {
+func (c *Container) parse_(steps int) ([]byte, string) {
 	bytes := c.Content[c.Cursor : c.Cursor+steps]
 	c.Cursor += steps
-	return bytes
+	return bytes, string(bytes)
 }
 
 func (c *Container) parse_u4() []byte {

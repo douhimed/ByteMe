@@ -112,13 +112,8 @@ type Clazz struct {
 	Major         int16                `json:"major"`
 	ConstantsPool []Constant_Pool_Type `json:"constants_pool"`
 	AccessFlags   []string             `json:"access_flags"`
-	ThisClass     _Class               `json:"this_class"`
-	SuperClass    _Class               `json:"super_class"`
-}
-
-type _Class struct {
-	This_class int16              `json:"this_class"`
-	Cp_info    Constant_Pool_Type `json:"this_class_cp_type"`
+	ThisClass     Constant_Pool_Type   `json:"this_class"`
+	SuperClass    Constant_Pool_Type   `json:"super_class"`
 }
 
 func (c *Clazz) AddFlagAccess(f string) {
@@ -192,7 +187,7 @@ func (container *Container) parseClassFlags(cl *Clazz) {
 	}
 }
 
-func (container *Container) getConstantPoolInfos(cl *Clazz, index int16) (*_Class, error) {
+func (container *Container) getConstantPoolInfos(cl *Clazz, index int16) (Constant_Pool_Type, error) {
 	if index == 0 || int(index) > len(cl.ConstantsPool) {
 		return nil, fmt.Errorf("invalid constant pool index: %d", index)
 	}
@@ -202,30 +197,27 @@ func (container *Container) getConstantPoolInfos(cl *Clazz, index int16) (*_Clas
 		return nil, fmt.Errorf("unexpected type in constant pool at index %d", index)
 	}
 
-	return &_Class{
-		This_class: index,
-		Cp_info:    cl.ConstantsPool[cp.Name_index],
-	}, nil
+	return cl.ConstantsPool[cp.Name_index], nil
 }
 
 func (container *Container) parseThisClass(cl *Clazz) {
 	thisClassIndex := container.parse_u2()
-	class, err := container.getConstantPoolInfos(cl, thisClassIndex)
+	cp, err := container.getConstantPoolInfos(cl, thisClassIndex)
 	if err != nil {
 		log.Fatal(err)
 		os.Exit(0)
 	}
-	cl.ThisClass = *class
+	cl.ThisClass = cp
 }
 
 func (container *Container) parseSuperClass(cl *Clazz) {
 	superClassIndex := container.parse_u2()
-	class, err := container.getConstantPoolInfos(cl, superClassIndex)
+	cp, err := container.getConstantPoolInfos(cl, superClassIndex)
 	if err != nil {
 		log.Fatal(err)
 		os.Exit(0)
 	}
-	cl.SuperClass = *class
+	cl.SuperClass = cp
 }
 
 func (container *Container) parseMethodref(tagValue string) Methodref_Info {

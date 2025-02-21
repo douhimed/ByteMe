@@ -30,6 +30,8 @@ func main() {
 	}
 
 	container.parseClassFlags(clazz)
+	container.parseThisClass(clazz)
+	container.parseSuperClass(clazz)
 
 	clazz.asJson()
 }
@@ -110,6 +112,13 @@ type Clazz struct {
 	Major         int16                `json:"major"`
 	ConstantsPool []Constant_Pool_Type `json:"constants_pool"`
 	AccessFlags   []string             `json:"access_flags"`
+	ThisClass     _Class               `json:"this_class"`
+	SuperClass    _Class               `json:"super_class"`
+}
+
+type _Class struct {
+	This_class int16              `json:"this_class"`
+	Cp_info    Constant_Pool_Type `json:"this_class_cp_type"`
 }
 
 func (c *Clazz) AddFlagAccess(f string) {
@@ -129,7 +138,8 @@ func (c *Clazz) asJson() {
 
 }
 
-type Constant_Pool_Type interface{}
+type Constant_Pool_Type interface {
+}
 
 type Methodref_Info struct {
 	Tag                 string `json:"tag"`
@@ -180,6 +190,42 @@ func (container *Container) parseClassFlags(cl *Clazz) {
 			cl.AddFlagAccess(name)
 		}
 	}
+}
+
+func (container *Container) getConstantPoolInfos(cl *Clazz, index int16) (*_Class, error) {
+	if index == 0 || int(index) > len(cl.ConstantsPool) {
+		return nil, fmt.Errorf("invalid constant pool index: %d", index)
+	}
+
+	cp, ok := cl.ConstantsPool[index-1].(CONSTANT_Class_Info)
+	if !ok {
+		return nil, fmt.Errorf("unexpected type in constant pool at index %d", index)
+	}
+
+	return &_Class{
+		This_class: index,
+		Cp_info:    cl.ConstantsPool[cp.Name_index-1],
+	}, nil
+}
+
+func (container *Container) parseThisClass(cl *Clazz) {
+	thisClassIndex := container.parse_u2()
+	class, err := container.getConstantPoolInfos(cl, thisClassIndex)
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(0)
+	}
+	cl.ThisClass = *class
+}
+
+func (container *Container) parseSuperClass(cl *Clazz) {
+	superClassIndex := container.parse_u2()
+	class, err := container.getConstantPoolInfos(cl, superClassIndex)
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(0)
+	}
+	cl.SuperClass = *class
 }
 
 func (container *Container) parseMethodref(tagValue string) Methodref_Info {

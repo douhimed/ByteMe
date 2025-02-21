@@ -204,7 +204,7 @@ func (container *Container) getConstantPoolInfos(cl *Clazz, index int16) (*_Clas
 
 	return &_Class{
 		This_class: index,
-		Cp_info:    cl.ConstantsPool[cp.Name_index-1],
+		Cp_info:    cl.ConstantsPool[cp.Name_index],
 	}, nil
 }
 
@@ -239,7 +239,7 @@ func (container *Container) parseMethodref(tagValue string) Methodref_Info {
 func (container *Container) parseClass(tagValue string) CONSTANT_Class_Info {
 	return CONSTANT_Class_Info{
 		Tag:        tagValue,
-		Name_index: container.parse_u2(),
+		Name_index: container.parse_u2() - 1,
 	}
 }
 

@@ -19,19 +19,12 @@ func main() {
 		Major: container.parse_u2(),
 	}
 
-	constPoolCount := int(container.parse_u2())
-	for i := 0; i < constPoolCount-1; i++ {
-		tag := container.parse_u1()
-		cp := parseConstantPoolEntry(container, tag)
-
-		if cp != nil {
-			clazz.addContstantPool(cp)
-		}
-	}
-
+	container.parseConstantsPool(clazz)
 	container.parseClassFlags(clazz)
 	container.parseThisClass(clazz)
 	container.parseSuperClass(clazz)
+	container.parseInterfaces(clazz)
+	container.parseFields(clazz)
 
 	clazz.asJson()
 }
@@ -107,13 +100,20 @@ func to_int8(data []byte) int8 {
 // Clazz Funcs : The class File Structure
 
 type Clazz struct {
-	Magic         string               `json:"magic"`
-	Minor         int16                `json:"manor"`
-	Major         int16                `json:"major"`
-	ConstantsPool []Constant_Pool_Type `json:"constants_pool"`
-	AccessFlags   []string             `json:"access_flags"`
-	ThisClass     Constant_Pool_Type   `json:"this_class"`
-	SuperClass    Constant_Pool_Type   `json:"super_class"`
+	Magic           string               `json:"magic"`
+	Minor           int16                `json:"manor"`
+	Major           int16                `json:"major"`
+	ConstantsPool   []Constant_Pool_Type `json:"constants_pool"`
+	AccessFlags     []string             `json:"access_flags"`
+	ThisClass       Constant_Pool_Type   `json:"this_class"`
+	SuperClass      Constant_Pool_Type   `json:"super_class"`
+	InterfacesCount int16                `json:"interfaces_count"`
+	FieldsCount     int16                `json:"fields_count"`
+	Methods         []Method_Info        `json:"methods"`
+}
+
+func (c *Clazz) addMethod(m Method_Info) {
+	c.Methods = append(c.Methods, m)
 }
 
 func (c *Clazz) AddFlagAccess(f string) {
@@ -140,6 +140,16 @@ type Methodref_Info struct {
 	Tag                 string `json:"tag"`
 	Class_index         int16  `json:"class_index"`
 	Name_and_type_index int16  `json:"name_and_type_index"`
+}
+
+type Method_Info struct {
+	Access_flags     int16            `json:"access_flags"`
+	Name_index       int16            `json:"name_index"`
+	Descriptor_index int16            `json:"descriptor_index"`
+	Attributes       []Attribute_Info `json:"attributes"`
+}
+
+type Attribute_Info struct {
 }
 
 type CONSTANT_Class_Info struct {
@@ -175,6 +185,18 @@ type CONSTANT_String_info struct {
 type Container struct {
 	Content []byte
 	Cursor  int
+}
+
+func (container *Container) parseConstantsPool(cl *Clazz) {
+	constPoolCount := int(container.parse_u2())
+	for i := 0; i < constPoolCount-1; i++ {
+		tag := container.parse_u1()
+		cp := parseConstantPoolEntry(container, tag)
+
+		if cp != nil {
+			cl.addContstantPool(cp)
+		}
+	}
 }
 
 func (container *Container) parseClassFlags(cl *Clazz) {
@@ -218,6 +240,22 @@ func (container *Container) parseSuperClass(cl *Clazz) {
 		os.Exit(0)
 	}
 	cl.SuperClass = cp
+}
+
+func (container *Container) parseInterfaces(cl *Clazz) {
+	count := container.parse_u2()
+	cl.InterfacesCount = count
+	if count > 0 {
+		log.Fatal("interface parser is not yet implemented")
+	}
+}
+
+func (container *Container) parseFields(cl *Clazz) {
+	count := container.parse_u2()
+	cl.FieldsCount = count
+	if count > 0 {
+		log.Fatal("Fields parser is not yet implemented")
+	}
 }
 
 func (container *Container) parseMethodref(tagValue string) Methodref_Info {

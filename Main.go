@@ -546,13 +546,13 @@ var MethodAccessFlags = map[uint16]string{
 }
 
 var MethodHandlers = map[int8]string{
-	1: "REF_getField  getfield C.f:T",
-	2: "REF_getStatic getstatic C.f:T",
-	3: "REF_putField  putfield C.f:T",
-	4: "REF_putStatic putstatic C.f:T",
-	5: "REF_invokeVirtual invokevirtual C.m:(A*)T",
-	6: "REF_invokeStatic invokestatic C.m:(A*)T",
-	7: "REF_invokeSpecial invokespecial C.m:(A*)T",
-	8: "REF_newInvokeSpecial new C; dup; invokespecial C.<init>:(A*)V",
+	1: "REF_getField",
+	2: "REF_getStatic",
+	3: "REF_putField",
+	4: "REF_putStatic",
+	5: "REF_invokeVirtual",
+	6: "REF_invokeStatic",
+	7: "REF_invokeSpecial",
+	8: "REF_newInvokeSpecial",
 	9: "REF_invokeInterface",
 }

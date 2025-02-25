@@ -25,8 +25,10 @@ func main() {
 	container.parseSuperClass(clazz)
 	container.parseInterfaces(clazz)
 	container.parseFields(clazz)
+	container.parseMethods(clazz)
 
 	clazz.asJson()
+
 }
 
 // Util Funcs
@@ -47,9 +49,18 @@ func parseConstantPoolEntry(container *Container, tag int8) Constant_Pool_Type {
 		return container.parseFieldref(tagValue)
 	case CONSTANT_String:
 		return container.parseString(tagValue)
+	case CONSTANT_InvokeDynamic:
+		return container.parseInvokeDynamic(tagValue)
+	case CONSTANT_Dynamic:
+		return container.parseDynamic(tagValue)
+	case CONSTANT_Double:
+		return container.parseDouble(tagValue)
+	case CONSTANT_Float:
+		return container.parseFloat(tagValue)
+	case CONSTANT_MethodHandle:
+		return container.parseMethodHandle(tagValue)
 	default:
 		log.Printf("%s[%d] not yet implemented from the constant pool", POOL_CONSTANTS[tag], tag)
-		os.Exit(0)
 	}
 	return nil
 }
@@ -69,6 +80,16 @@ func InitContainerFromFile(file string) *Container {
 
 func to_uint16(data []byte) uint16 {
 	var res uint16
+	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &res)
+	if err != nil {
+		log.Fatal(err)
+		os.Exit(-1)
+	}
+	return res
+}
+
+func to_int32(data []byte) int32 {
+	var res int32
 	err := binary.Read(bytes.NewReader(data), binary.BigEndian, &res)
 	if err != nil {
 		log.Fatal(err)
@@ -112,18 +133,6 @@ type Clazz struct {
 	Methods         []Method_Info        `json:"methods"`
 }
 
-func (c *Clazz) addMethod(m Method_Info) {
-	c.Methods = append(c.Methods, m)
-}
-
-func (c *Clazz) AddFlagAccess(f string) {
-	c.AccessFlags = append(c.AccessFlags, f)
-}
-
-func (c *Clazz) addContstantPool(cp Constant_Pool_Type) {
-	c.ConstantsPool = append(c.ConstantsPool, cp)
-}
-
 func (c *Clazz) asJson() {
 	jsonData, err := json.MarshalIndent(c, "", "  ")
 	if err != nil {
@@ -143,13 +152,35 @@ type Methodref_Info struct {
 }
 
 type Method_Info struct {
-	Access_flags     int16            `json:"access_flags"`
+	Access_flags     []string         `json:"access_flags"`
 	Name_index       int16            `json:"name_index"`
 	Descriptor_index int16            `json:"descriptor_index"`
 	Attributes       []Attribute_Info `json:"attributes"`
 }
 
+func (m *Method_Info) parseAccessFlags(flags uint16) {
+	for bitmask, name := range MethodAccessFlags {
+		if flags&bitmask != 0 {
+			m.Access_flags = append(m.Access_flags, name)
+		}
+	}
+}
+
+func (m *Method_Info) parseAttributes(container *Container) {
+	count := int(container.parse_u2())
+	for i := 0; i < count; i++ {
+		var attr Attribute_Info
+		attr.Attribute_name_index = container.parse_u2()
+		attrLength := to_int32(container.parse_u4())
+		infobytes, _ := container.parse_(int(attrLength))
+		attr.Infos = infobytes
+		m.Attributes = append(m.Attributes, attr)
+	}
+}
+
 type Attribute_Info struct {
+	Attribute_name_index int16  `json:"attribute_name_index"`
+	Infos                []byte `josn:"infos"`
 }
 
 type CONSTANT_Class_Info struct {
@@ -175,6 +206,35 @@ type CONSTANT_Fieldref_info struct {
 	Name_and_type_index int16  `json:"name_and_type_index"`
 }
 
+type CONSTANT_Dynamic_info struct {
+	Tag                         string `json:"tag"`
+	Bootstrap_method_attr_index int16  `json:"bootstrap_method_attr_index"`
+	Name_and_type_index         int16  `json:"name_and_type_index"`
+}
+
+type CONSTANT_InvokeDynamic_info struct {
+	Tag                         string `json:"tag"`
+	Bootstrap_method_attr_index int16  `json:"bootstrap_method_attr_index"`
+	Name_and_type_index         int16  `json:"name_and_type_index"`
+}
+
+type CONSTANT_Double_info struct {
+	Tag       string `json:"tag"`
+	HighBytes []byte `json:"high_bytes"`
+	LowBytes  []byte `json:"low_bytes"`
+}
+
+type CONSTANT_Float_info struct {
+	Tag   string `json:"tag"`
+	Bytes []byte `json:"bytes"`
+}
+
+type CONSTANT_MethodHandle_info struct {
+	Tag            string `json:"tag`
+	ReferenceKind  string `json:"reference_kind"`
+	ReferenceIndex int16  `json:"reference_index"`
+}
+
 type CONSTANT_String_info struct {
 	Tag          string `json:"tag"`
 	String_index int16  `json:"string_index"`
@@ -194,7 +254,7 @@ func (container *Container) parseConstantsPool(cl *Clazz) {
 		cp := parseConstantPoolEntry(container, tag)
 
 		if cp != nil {
-			cl.addContstantPool(cp)
+			cl.ConstantsPool = append(cl.ConstantsPool, cp)
 		}
 	}
 }
@@ -202,9 +262,9 @@ func (container *Container) parseConstantsPool(cl *Clazz) {
 func (container *Container) parseClassFlags(cl *Clazz) {
 	flags := container.parse_u2_u()
 
-	for bitmask, name := range accessFlagsMap {
+	for bitmask, name := range classAccessFlagsMap {
 		if flags&bitmask != 0 {
-			cl.AddFlagAccess(name)
+			cl.AccessFlags = append(cl.AccessFlags, name)
 		}
 	}
 }
@@ -258,6 +318,18 @@ func (container *Container) parseFields(cl *Clazz) {
 	}
 }
 
+func (container *Container) parseMethods(cl *Clazz) {
+	count := container.parse_u2()
+	for i := 0; i < int(count); i++ {
+		var m Method_Info
+		m.parseAccessFlags(container.parse_u2_u())
+		m.Name_index = container.parse_u2()
+		m.Descriptor_index = container.parse_u2()
+		m.parseAttributes(container)
+		cl.Methods = append(cl.Methods, m)
+	}
+}
+
 func (container *Container) parseMethodref(tagValue string) Methodref_Info {
 	return Methodref_Info{
 		Tag:                 tagValue,
@@ -303,6 +375,45 @@ func (container *Container) parseString(tagValue string) CONSTANT_String_info {
 	return CONSTANT_String_info{
 		Tag:          tagValue,
 		String_index: container.parse_u2(),
+	}
+}
+
+func (c *Container) parseInvokeDynamic(tagValue string) CONSTANT_InvokeDynamic_info {
+	return CONSTANT_InvokeDynamic_info{
+		Tag:                         tagValue,
+		Bootstrap_method_attr_index: c.parse_u2(),
+		Name_and_type_index:         c.parse_u2(),
+	}
+}
+
+func (c *Container) parseDynamic(tagValue string) CONSTANT_Dynamic_info {
+	return CONSTANT_Dynamic_info{
+		Tag:                         tagValue,
+		Bootstrap_method_attr_index: c.parse_u2(),
+		Name_and_type_index:         c.parse_u2(),
+	}
+}
+
+func (c *Container) parseDouble(tagValue string) CONSTANT_Double_info {
+	return CONSTANT_Double_info{
+		Tag:       tagValue,
+		HighBytes: c.parse_u4(),
+		LowBytes:  c.parse_u4(),
+	}
+}
+
+func (c *Container) parseFloat(tagValue string) CONSTANT_Float_info {
+	return CONSTANT_Float_info{
+		Tag:   tagValue,
+		Bytes: c.parse_u4(),
+	}
+}
+
+func (c *Container) parseMethodHandle(tagValue string) CONSTANT_MethodHandle_info {
+	return CONSTANT_MethodHandle_info{
+		Tag:            tagValue,
+		ReferenceKind:  MethodHandlers[int8(c.parse_u1())],
+		ReferenceIndex: c.parse_u2(),
 	}
 }
 
@@ -392,7 +503,7 @@ const (
 	ACC_MODULE     = 0x8000
 )
 
-var accessFlagsMap = map[uint16]string{
+var classAccessFlagsMap = map[uint16]string{
 	ACC_PUBLIC:     "ACC_PUBLIC",
 	ACC_FINAL:      "ACC_FINAL",
 	ACC_SUPER:      "ACC_SUPER",
@@ -402,4 +513,46 @@ var accessFlagsMap = map[uint16]string{
 	ACC_ANNOTATION: "ACC_ANNOTATION",
 	ACC_ENUM:       "ACC_ENUM",
 	ACC_MODULE:     "ACC_MODULE",
+}
+
+const (
+	M_ACC_PUBLIC     = 0x0001
+	ACC_PRIVATE      = 0x0002
+	ACC_PROTECTED    = 0x0004
+	ACC_STATIC       = 0x0008
+	M_ACC_FINAL      = 0x0010
+	ACC_SYNCHRONIZED = 0x0020
+	ACC_BRIDGE       = 0x0040
+	ACC_VARARGS      = 0x0080
+	ACC_NATIVE       = 0x0100
+	M_ACC_ABSTRACT   = 0x0400
+	ACC_STRICT       = 0x0800
+	M_ACC_SYNTHETIC  = 0x1000
+)
+
+var MethodAccessFlags = map[uint16]string{
+	M_ACC_PUBLIC:     "ACC_PUBLIC",
+	ACC_PRIVATE:      "ACC_PRIVATE",
+	ACC_PROTECTED:    "ACC_PROTECTED",
+	ACC_STATIC:       "ACC_STATIC",
+	M_ACC_FINAL:      "ACC_FINAL",
+	ACC_SYNCHRONIZED: "ACC_SYNCHRONIZED",
+	ACC_BRIDGE:       "ACC_BRIDGE",
+	ACC_VARARGS:      "ACC_VARARGS",
+	ACC_NATIVE:       "ACC_NATIVE",
+	M_ACC_ABSTRACT:   "ACC_ABSTRACT",
+	ACC_STRICT:       "ACC_STRICT",
+	M_ACC_SYNTHETIC:  "ACC_SYNTHETIC",
+}
+
+var MethodHandlers = map[int8]string{
+	1: "REF_getField  getfield C.f:T",
+	2: "REF_getStatic getstatic C.f:T",
+	3: "REF_putField  putfield C.f:T",
+	4: "REF_putStatic putstatic C.f:T",
+	5: "REF_invokeVirtual invokevirtual C.m:(A*)T",
+	6: "REF_invokeStatic invokestatic C.m:(A*)T",
+	7: "REF_invokeSpecial invokespecial C.m:(A*)T",
+	8: "REF_newInvokeSpecial new C; dup; invokespecial C.<init>:(A*)V",
+	9: "REF_invokeInterface",
 }

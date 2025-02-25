@@ -230,7 +230,7 @@ type CONSTANT_Float_info struct {
 }
 
 type CONSTANT_MethodHandle_info struct {
-	Tag            string `json:"tag`
+	Tag            string `json:"tag"`
 	ReferenceKind  string `json:"reference_kind"`
 	ReferenceIndex int16  `json:"reference_index"`
 }
